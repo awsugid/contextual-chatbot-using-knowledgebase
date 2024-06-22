@@ -1,0 +1,75 @@
+Parameters:
+  KnowledgeBaseID:
+    Type: String
+    Description: The Bedrock Knowledge base ID
+    Default: ''
+  LambdaLayerS3BucketName:
+    Type: String
+    Description: The S3 bucket stores lambda layer code
+    Default: ''
+  RandomId:
+    Type: String
+    Description: A random ID for resource name
+    Default: ''
+
+Resources:
+  LambdaExecutionRoleForKnowledgeBase:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: KnowledgeBaseExecutionPermissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'bedrock:InvokeModel'
+                  - 'bedrock:Retrieve'
+                  - 'bedrock:RetrieveAndGenerate'
+                Resource: '*'
+
+  DeployKnowledgeBaseLambdaLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: KnowledgeBaseLambdaLayer
+      Description: Knowledge Base Lambda Layer
+      Content:
+        S3Bucket: !Ref LambdaLayerS3BucketName
+        S3Key: lambda/layer/boto3-layer.zip
+      CompatibleRuntimes:
+        - python3.12
+        - python3.11
+        - python3.10
+        - python3.9
+
+  DeployKnowledgeBaseLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "InvokeKnowledgeBase-${RandomId}"
+      Code:
+        ZipFile: |
+{{LAMBDA_FUNCTION}}
+
+      Description: Create KnowledgeBase Lambda
+      Handler: index.lambda_handler
+      MemorySize: 256
+      Role: !GetAtt LambdaExecutionRoleForKnowledgeBase.Arn
+      Runtime: python3.9
+      Timeout: 60
+      Layers: 
+        - !Ref DeployKnowledgeBaseLambdaLayer
+      Environment:
+        Variables:
+          KNOWLEDGE_BASE_ID: !Ref KnowledgeBaseID
