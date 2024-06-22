@@ -1,0 +1,27 @@
+1. Create new Python environment
+
+```sh
+python3 -m venv create-boto3-layer
+```
+
+2. Activate new environment
+
+```sh
+source create-boto3-layer/bin/activate
+```
+
+3. Install boto3
+
+```sh
+pip install -r requirements.txt
+```
+
+4. Zip the layer
+
+```sh
+mkdir -p python
+rm -rf python/* 2>/dev/null
+rm boto3-layer.zip 2>/dev/null
+cp -r create-boto3-layer/lib python/
+zip -r boto3-layer.zip python
+```
