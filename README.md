@@ -194,6 +194,12 @@ Masuk pada direktori `streamlit/`.
 cd streamlit
 ```
 
+Pastikan default region di set ke `us-east-1` agar pemanggilan fungsi Lambda benar.
+
+```sh
+export AWS_DEFAULT_REGION=us-east-1
+```
+
 Dan jalankan perintah berikut untuk memulai aplikasi chatbot di port 8080.
 
 ```sh
