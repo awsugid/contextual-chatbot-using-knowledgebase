@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.654.0",
+    "express": "^4.21.0",
+    "serverless-http": "^3.2.0"
+  }
+}

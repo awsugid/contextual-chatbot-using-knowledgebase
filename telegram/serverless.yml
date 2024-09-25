@@ -1,0 +1,31 @@
+service: contextual-chatbot-kb
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  httpApi:
+    cors: true
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - bedrock:InvokeModel
+            - bedrock:RetrieveAndGenerate
+            - bedrock:Retrieve
+          Resource: '*'
+
+functions:
+  bot:
+    handler: index.handler
+    timeout: 29
+    events:
+      - httpApi:
+          method: POST
+          path: /bot/{token}
+    environment:
+      APP_BOT_TOKEN: ${env:APP_BOT_TOKEN}
+      APP_MODEL_ID: ${env:APP_MODEL_ID, 'anthropic.claude-3-sonnet-20240229-v1:0'}
+      APP_KB_ID: ${env:APP_KB_ID}
