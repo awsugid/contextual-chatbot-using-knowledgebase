@@ -2,6 +2,9 @@ const serverless = require('serverless-http');
 const express = require('express');
 const app = express();
 const { BedrockAgentRuntimeClient, RetrieveAndGenerateCommand } = require("@aws-sdk/client-bedrock-agent-runtime");
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+
 
 const appBotToken = process.env.APP_WEBHOOK_TOKEN || "token-123abc,,,";
 const runInBackground = process.env.hasOwnProperty("APP_DAEMONIZE") === true;
@@ -10,6 +13,30 @@ const knowledgeBaseId = process.env.APP_KB_ID || "kb-123abc";
 
 // Create a Bedrock Agent Runtime client
 const bedrockClient = new BedrockAgentRuntimeClient();
+
+// Configure the S3 client
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION, // Replace with your region
+  // AWS credentials are automatically loaded from environment variables or IAM role
+});
+
+async function generatePresignedUrl(bucket, key, expirationSeconds = 3600) {
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+  });
+
+  try {
+    const signedUrl = await getSignedUrl(s3Client, command, {
+      expiresIn: expirationSeconds,
+    });
+    console.log("Presigned URL:", signedUrl);
+    return signedUrl;
+  } catch (err) {
+    console.error("Error generating presigned URL:", err);
+    throw err;
+  }
+}
 
 // Function to perform retrieve and generate operation
 async function retrieveAndGenerate(knowledgeBaseId, input, sessionId = "") {
@@ -79,6 +106,41 @@ function extractCitationReferences(citations) {
   return references;
 }
 
+function parseS3Object(s3Object) {
+  if (typeof s3Object !== 'string') {
+    throw new Error('Input must be a string');
+  }
+
+  // Check if it's an S3 URL (https:// or http://)
+  if (s3Object.startsWith('https://') || s3Object.startsWith('http://')) {
+    const url = new URL(s3Object);
+    const pathParts = url.pathname.split('/').filter(part => part !== '');
+    const bucket = url.hostname.split('.')[0];
+    const key = pathParts.join('/');
+    return { bucket, key };
+  }
+
+  // Check if it's an S3 protocol URL (s3://)
+  if (s3Object.startsWith('s3://')) {
+    const parts = s3Object.slice(5).split('/');
+    const bucket = parts[0];
+    const key = parts.slice(1).join('/');
+    return { bucket, key };
+  }
+
+  // Assume it's in the format 'bucket/key'
+  const parts = s3Object.split('/');
+  const bucket = parts[0];
+  const key = parts.slice(1).join('/');
+
+  // Validate that we have both bucket and key
+  if (!bucket || !key) {
+    throw new Error('Unable to parse S3 object. Invalid format.');
+  }
+
+  return { bucket, key };
+}
+
 // Bot Token Middleware Auth
 function botTokenMiddleware(req, res, next) {
   const userBotToken = req.params.token || '';
@@ -113,11 +175,24 @@ app.post("/bot/:token", botTokenMiddleware, express.json(), async (req, res) => 
     const result = await retrieveAndGenerate(knowledgeBaseId, query, currentSessionId);
     console.log(result);
     // console.log(result.citations[0].retrievedReferences[0].location.s3Location);
-    // const references = extractCitationReferences(result.citations);
+    const references = extractCitationReferences(result.citations);
     currentSessionId = result.sessionId;
+
+    let referenceCounter = 0;
+    const referencesInlines = [];
+    for (let i = 0; i < references.length; i++) {
+      const ref = references[i];
+      const { bucket, key } = parseS3Object(ref.uri);
+      const presignedUrl = await generatePresignedUrl(bucket, key);
+      referencesInlines.push({ text: 'Referensi ' + (++referenceCounter), url: presignedUrl });
+    }
 
     // res.json({ text: result.output.text, references: references });
     botResponse.text = result.output.text;
+    botResponse.reply_markup = {
+      inline_keyboard: [referencesInlines]
+    };
+    // botResponse.text = dummyText;
     res.json(botResponse);
   } catch (error) {
     console.error("Error:", error);

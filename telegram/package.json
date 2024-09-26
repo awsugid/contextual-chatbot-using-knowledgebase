@@ -1,6 +1,8 @@
 {
   "dependencies": {
     "@aws-sdk/client-bedrock-agent-runtime": "^3.654.0",
+    "@aws-sdk/client-s3": "^3.658.1",
+    "@aws-sdk/s3-request-presigner": "^3.658.1",
     "express": "^4.21.0",
     "serverless-http": "^3.2.0"
   }
