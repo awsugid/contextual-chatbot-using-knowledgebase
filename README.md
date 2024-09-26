@@ -1,5 +1,7 @@
 # Overview
 
+Please check [telegram-bot](https://github.com/awsugid/contextual-chatbot-using-knowledgebase/tree/telegram-bot) branch for integration with Telegram instead of Streamlit.
+
 Repositori ini diturunkan dari [aws-samples/contextual-chatbot-using-knowledgebase](https://github.com/aws-samples/amazon-bedrock-samples/tree/main/rag-solutions/contextual-chatbot-using-knowledgebase). Untuk dokumentasi detil silahkan merujuk ke GitHub repo tersebut.
 
 Solusi pada repo ini berfokus pada bagaimana menggunakan Amazon Bedrock Knowledge Bases untuk percapakan Bahasa Indonesia. Gambaran umum implementasi RAG yang akan digunakan seperti berikut:
