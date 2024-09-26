@@ -56,7 +56,7 @@ async function retrieveAndGenerate(knowledgeBaseId, input, sessionId = "") {
 
               If the search results do not contain information that can answer the question, reply with "Sorry, I don't know.". IMPORTANT! Do not try to become smart by providing answer outside the <search></search> result. You will be punished when giving answer outside the <search></search> result.
 
-              Always reply in Bahasa Indonesia whenever possible.
+              Always translate your answer from English to Bahasa Indonesia.
 
               <search>$search_results$</search>
 
@@ -172,6 +172,12 @@ app.post("/bot/:token", botTokenMiddleware, express.json(), async (req, res) => 
   try {
     console.log(req.body);
 
+    if (query === '/start') {
+      botResponse.text = 'Oke, saya siap menerima pertanyaan!';
+      res.json(botResponse);
+      return;
+    }
+
     const result = await retrieveAndGenerate(knowledgeBaseId, query, currentSessionId);
     console.log(result);
     // console.log(result.citations[0].retrievedReferences[0].location.s3Location);
@@ -182,6 +188,9 @@ app.post("/bot/:token", botTokenMiddleware, express.json(), async (req, res) => 
     const referencesInlines = [];
     for (let i = 0; i < references.length; i++) {
       const ref = references[i];
+      if (!ref) { continue; }
+      if (ref.hasOwnProperty('uri') === false) { continue; }
+
       const { bucket, key } = parseS3Object(ref.uri);
       const presignedUrl = await generatePresignedUrl(bucket, key);
       referencesInlines.push({ text: 'Referensi ' + (++referenceCounter), url: presignedUrl });

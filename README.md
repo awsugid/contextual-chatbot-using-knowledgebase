@@ -95,120 +95,109 @@ Setelah proses pembuatan Knowledge base selesai. Maka perlu ada langkah Sync unt
 
    ![Sync data source](images/05-sync-data-source.png)
 
-## Mengupload Lambda layer ke S3 bucket
+## Menjalankan Chatbot di Telegram
 
-Buat lambda layer yang berisi library boto3 menggunakan perintah berikut. Masuk ke direktori `lambda/layer/`. Di sini saya menggunakan Python 3.9.
+Saya menggunakan AWS Lambda untuk menempatkan business logic untuk menangani request dari Telegram. Fungsi ini nantinya akan memanggil Knowledge Bases for Amazon Bedrock yang sudah dibuat sebelumnya.
+
+### Menginstall Serverless Framework
+
+Untuk melakukan deployment fungsi Lambda yang akan dibuat saya menggunakan Serverless Framework. Install dan buat akun di [Serverless Framework](https://serverless.com).
 
 ```sh
-cd lambda/layer
+npm install -g serverless
 ```
 
-Buat environment baru dengan menggunakan Python venv.
+### Deploy AWS Lambda
+
+Sebelum melakukan deploy kamu harus menset beberapa environment variable yang dibutuhkan oleh fungsi Lambda ini.
+
+Env | Keterangan
+----|-----------
+APP_WEBHOOK_TOKEN | Token yang kamu tentukan untuk mengamankan Webhook URL. Ini digunakan oleh Telegram Webhook ketika melakukan request ke API Lambda.
+APP_KB_ID | Knowledge Base Id yang telah dibuat sebelumnya
+APP_MODEL_ID | Foundation Model Id, default ke Claude 3 Sonnet. Gunakan AWS CLI `aws bedrock list-foundation-models` untuk melihat semua foundation model yang tersedia
 
 ```sh
-python3 -m venv create-boto3-layer
+export APP_WEBHOOK_TOKEN=YOUR_WEBHOOK_TOKEN
+export APP_KB_ID=YOUR_KNOWLEDGE_BASE_ID
+export APP_MODEL_ID="anthropic.claude-3-sonnet-20240229-v1:0"
 ```
 
-Aktifkan environment baru tersebut.
+Deploy AWS Lambda menggunakan Serverless Framework. Ganti region `us-east-1` sesuai dengan region dimana kamu ingin deploy.
 
 ```sh
-source create-boto3-layer/bin/activate
+serverless deploy --region=us-east-1
 ```
 
-Install library boto3 dengan pip.
+Outputnya kurang lebih akan seperti di bawah.
 
-```sh
-pip install -r requirements.txt
+```
+✔ Service deployed to stack contextual-chatbot-kb-dev (52s)
+
+endpoint: POST - https://RANDOM_CODE.execute-api.us-east-1.amazonaws.com/bot/{token}
+functions:
+  bot: contextual-chatbot-kb-dev-bot (4.9 MB)
 ```
 
-Zip file-file library boto3.
+Tes untuk memastikan endpoint menghasilkan respon yang diinginkan.
 
-```sh
-mkdir -p python
-rm -rf python/* 2>/dev/null
-rm boto3-layer.zip 2>/dev/null
-cp -r create-boto3-layer/lib python/
-zip -r boto3-layer.zip python
-```
-
-Lambda layer ini `lambda/layer/boto3-layer.zip` berisi library boto3 versi `1.34.130` yang sudah memiliki update ke keluarga model Anthropic Claude 3.
-
-Upload layer ini ke S3 bucket yang telah dibuat karena kedepan fungsi Lambda akan menggunakan Lambda layer ini.
-
-```sh
-aws s3 cp \
- ./boto3-layer.zip s3://awsugid-rag-kb-yourname/lambda/layer/boto3-layer.zip \
- --region us-east-1
-```
-
-## Membuat fungsi AWS Lambda
-
-Fungsi Lambda ini akan di-deploy menggunakan AWS CloudFormation yang tersedia di direktori `cfn/`. Template dari CloudFormation tersebut di-build terlebih dahulu sebelum dijalankan. Build ini akan mengganti teks `{{LAMBDA_FUNCTION}}` di template contoh dengan isi dari file `lambda/bedrock-kb-retrieve-generate.py`.
-
-Pastikan berada di root direktori dari project.
-
-```sh
-bash cfn/build-template.sh
+```ch
+curl -XPOST -H 'Content-Type: application/json' \
+ https://RANDOM_CODE.execute-api.us-east-1.amazonaws.com/bot/YOUR_WEBHOOK_TOKEN \
+ -d '{
+ "message": {
+    "text": "Tampilkan laba di Q4 2023",
+    "chat": {
+      "id": 1000
+    }
+  }
+}'
 ```
 
 Output:
 
 ```
-Template file cfn/deploy-lambda-function.yaml.template has been built to cfn/deploy-lambda-function.yaml
+{
+  "method": "sendMessage",
+  "chat_id": 1000,
+  "text": "Laba bersih Amazon pada kuartal keempat 2023 meningkat menjadi $10,6 miliar, atau $1,00 per saham dilusikan, dibandingkan dengan $0,3 miliar, atau $0,03 per saham dilusikan, pada kuartal keempat 2022.",
+  "reply_markup": {
+    "inline_keyboard": [
+      [
+        {
+          "text": "Referensi 1",
+          "url": "VERY_LONG_S3_PRESIGNED_URL"
+        }
+      ]
+    ]
+  }
+}
 ```
 
-CloudFormation template pada `cfn/deploy-lambda-function.yaml` memerlukan tiga parameter yaitu:
+### Setup Telegram Bot
 
-1. `KnowledgeBaseID` - Nama Knowledge base ID dari yang dibuat sebelumnya.
-2. `LambdaLayerS3BucketName` - Nama Amazon S3 bucket yang menyimpan Lambda layer
-3. `RandomId` - Random Id untuk agar nama resource menjadi unik
+Pergi ke halaman [Telegram: How do I create bot](https://core.telegram.org/bots/faq#how-do-i-create-a-bot) untuk mulai membuat bot. Gunakan @BotFather untuk mengelola.
 
-Di sini saya akan menggunakan AWS CLI untuk membuat sebuah CloudFormation stack.
+Setelah mendapat Telegram Bot Token, gunakan URL Lambda yang telah di-deploy pada langkah sebelumnya untuk men-setup webhook. Ganti `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11` dengan Telegram Bot Token yang kamu dapat dari @BotFather.
 
-```sh
-export MY_RANDOM_ID=abc123
-export MY_KB_ID=YOUR_KNOWLEDGE_BASE_ID
-export MY_LAMBDA_LAYER_BUCKET=awsugid-rag-kb-yourname
+```
+curl -XPOST -H 'Content-Type: application/json' \
+ 'https://api.telegram.org/bot123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11/setWebhook' \
+ -d '{
+  "url": "https://RANDOM_CODE.execute-api.us-east-1.amazonaws.com/bot/YOUR_WEBHOOK_TOKEN"
+ }'
 ```
 
-```sh
-aws cloudformation create-stack \
- --stack-name awsugid-kb-demo-$MY_RANDOM_ID \
- --template-body file://cfn/deploy-lambda-function.yaml \
- --capabilities CAPABILITY_IAM \
- --region us-east-1 \
- --parameters ParameterKey=KnowledgeBaseID,ParameterValue=$MY_KB_ID ParameterKey=LambdaLayerS3BucketName,ParameterValue=$MY_LAMBDA_LAYER_BUCKET ParameterKey=RandomId,ParameterValue=$MY_RANDOM_ID
-```
+Jika berhasil maka terdapat respon `{ "ok": true }`.
 
-## Menjalankan Chatbot
+### Tes Telegram Bot
 
-Untuk membuat aplikasi chatbot, saya memanfaatkan library Streamlit. Aplikasi chatbot ada pada direktori `streamlit/`. Sebelum menjalankan ada beberapa library yang harus diinstall.
+Buka bot yang kamu buat di Telegram, kemudian mulai mengetikkan pertanyaan. Gunakan contoh daftar pertanyaan di bawah. Berikut ini adalah screenshoot dari tampilkan chatbot di Telegram.
 
-```sh
-pip install boto3 streamlit
-```
+![RAG](images/telegram-bot-demo.jpg)
 
-Masuk pada direktori `streamlit/`.
 
-```sh
-cd streamlit
-```
-
-Pastikan default region di set ke `us-east-1` agar pemanggilan fungsi Lambda benar.
-
-```sh
-export AWS_DEFAULT_REGION=us-east-1
-```
-
-Dan jalankan perintah berikut untuk memulai aplikasi chatbot di port 8080.
-
-```sh
-python3 -m streamlit run chatbot.py --server.port 8080
-```
-
-Buka browser kamu dan arahkan pada alamat `http://localhost:8080/` diasumsikan hostname kamu adalah localhost.
-
-![Streamlit chatbot](images/06-chatbot-streamlit.png)
+## Contoh daftar pertanyaan
 
 Berikut daftar pertanyaan yang dapat dicoba pada chatbot.
 
