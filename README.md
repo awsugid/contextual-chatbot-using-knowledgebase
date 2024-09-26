@@ -198,6 +198,7 @@ Pastikan default region di set ke `us-east-1` agar pemanggilan fungsi Lambda ben
 
 ```sh
 export AWS_DEFAULT_REGION=us-east-1
+export LAMBDA_FUNCTION=YOUR_LAMBDA_FUNCTION
 ```
 
 Dan jalankan perintah berikut untuk memulai aplikasi chatbot di port 8080.
